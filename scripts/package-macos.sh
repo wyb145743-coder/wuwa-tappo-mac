@@ -74,9 +74,25 @@ case "$EXECUTABLE" in
   ''|*/*|.|..) printf '%s\n' '应用主程序名称无效。' >&2; exit 1 ;;
 esac
 BINARY="$APP/Contents/MacOS/$EXECUTABLE"
+
 phase '检查架构与签名'
-if [ ! -f "$BINARY" ] || [ "$(/usr/bin/lipo -archs "$BINARY")" != arm64 ]; then
-  printf '%s\n' '安装包必须包含 Apple Silicon 原生主程序。' >&2
+HOST_ARCH="$(uname -m)"
+EXPECTED_ARCH="${WUWA_ARCH:-$HOST_ARCH}"
+case "$EXPECTED_ARCH" in
+  arm64|x86_64) ;;
+  *) printf '不支持的构建架构：%s\n' "$EXPECTED_ARCH" >&2; exit 1 ;;
+esac
+if [ "$HOST_ARCH" != "$EXPECTED_ARCH" ]; then
+  printf '构建机器架构 %s 与要求的 %s 不一致。\n' "$HOST_ARCH" "$EXPECTED_ARCH" >&2
+  exit 1
+fi
+if [ ! -f "$BINARY" ]; then
+  printf '%s\n' '未找到应用主程序。' >&2
+  exit 1
+fi
+BINARY_ARCHS=$(/usr/bin/lipo -archs "$BINARY")
+if [ "$BINARY_ARCHS" != "$EXPECTED_ARCH" ]; then
+  printf '安装包主程序架构应为 %s，实际为 %s。\n' "$EXPECTED_ARCH" "$BINARY_ARCHS" >&2
   exit 1
 fi
 /usr/bin/codesign --verify --deep --strict "$APP"
@@ -111,7 +127,7 @@ mkdir -p "$OUTPUT"
 OUTPUT="$(cd "$OUTPUT" && pwd)"
 STAGE=$(mktemp -d "${TMPDIR:-/tmp}/wuwatappo-package.XXXXXX")
 trap 'rm -rf "$STAGE"' EXIT
-NAME="$ARTIFACT_PREFIX-$VERSION-arm64"
+NAME="$ARTIFACT_PREFIX-$VERSION-$EXPECTED_ARCH"
 phase '复制应用并复查签名'
 ditto --norsrc --noextattr --noqtn --noacl "$APP" "$STAGE/$PRODUCT_NAME.app"
 /usr/bin/codesign --verify --deep --strict "$STAGE/$PRODUCT_NAME.app"
@@ -129,4 +145,4 @@ phase '校验 DMG'
 hdiutil verify "$STAGE/$NAME.dmg"
 phase '交付安装包'
 mv "$STAGE/$NAME.zip" "$STAGE/$NAME.dmg" "$OUTPUT/"
-printf '完整%s安装包：\n%s\n%s\n' "$REGION_LABEL" "$OUTPUT/$NAME.zip" "$OUTPUT/$NAME.dmg"
+printf '完整%s（%s）安装包：\n%s\n%s\n' "$REGION_LABEL" "$EXPECTED_ARCH" "$OUTPUT/$NAME.zip" "$OUTPUT/$NAME.dmg"
