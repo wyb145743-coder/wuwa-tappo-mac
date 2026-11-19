@@ -48,7 +48,7 @@ jobs:
           for REGION in CN Global; do
             for ARCH in arm64 x86_64; do
               for EXT in zip dmg; do
-                PACKAGES=(dist/WuwaTappo-"$REGION"-Mac-"$ARCH"."$EXT")
+                PACKAGES=(dist/WuwaTappo-"$REGION"-Mac-*-"$ARCH"."$EXT")
                 [[ ${#PACKAGES[@]} -eq 1 && -f "${PACKAGES[0]}" ]] || {
                   echo "Expected exactly one $REGION $ARCH $EXT package."
                   printf 'Matched: %s\n' "${PACKAGES[@]:-<none>}"
